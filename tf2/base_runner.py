@@ -11,6 +11,7 @@ from tensorflow.lite.python.util import run_graph_optimizations, get_grappler_co
 from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_v2_as_graph as convert_to_constants
 
 import src.utils as utils
+from datasets.transform import read_input_images
 
 
 class Runner:
@@ -48,6 +49,8 @@ class Runner:
 
         elif self.stage == 'apply':
             self.training = False
+            self.input_shape = (1, self.args.patch_size, self.args.patch_size, self.ch)
+
             if (self.args.restore_epoch is None) or (self.args.restore_step is None):
                 raise Exception('base_runner.py: def __init__(...): error: specify both restore_epoch and restore_step; found: restore_epoch {}, restore_step {}'.format(self.args.restore_epoch, self.args.restore_step))
             self.restore_epoch, self.global_step = self.args.restore_epoch, self.args.restore_step
@@ -80,7 +83,34 @@ class Runner:
         raise NotImplementedError
 
     def apply(self):
-        raise NotImplementedError
+        self.assert_apply_paths()
+        utils.dump2json(obj=vars(self.args), fp=os.path.join(self.checkpoints_config, 'apply_cmd.json'))
+
+        model = self.create_model(trainable=False)
+        self.build_model(model, input_shape=self.input_shape)
+        model.load_weights(self.checkpoints_restore)
+        print("[*] Successfully loaded weights!")
+
+        _, ext = os.path.splitext(os.path.split(self.apply_list)[-1])
+        with open(self.apply_list, 'r') as f:
+            apply_dataset = f.read().splitlines()
+        apply_dataset = list(map(lambda x: [os.path.join(r'E:\IXI_0_1\test', y) for y in x.split(' ')], apply_dataset))
+
+        psnr_total = 0
+        for i in tqdm(range(len(apply_dataset))):
+            gt_path, sketch_path, kellner_path = apply_dataset[i]
+            # read input image
+            gt, sketch, kellner = read_input_images(gt_path, sketch_path, kellner_path, do_aug=False)
+            sketch = sketch[np.newaxis,...]
+            kellner = kellner[np.newaxis,...]
+            # inference
+            res_img = model(tf.concat([sketch, kellner],axis=3), training=False)[0]
+            res_img = np.clip(res_img, 0., 1.)
+
+            psnr = tf.image.psnr(res_img,gt,1.0)
+            psnr_total += psnr.numpy()
+
+        print(psnr_total / len(apply_dataset))
 
     def to_proto(self):
         self.assert_to_proto_paths()

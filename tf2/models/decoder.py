@@ -46,6 +46,6 @@ class ResidualFusionDecoder(BaseModel):
             y = self.fusion_layers['fuse_cnv_{}'.format(i)](a1, a2, training=training)
             y = self.act_layers['dec_cnv_{}'.format(i)](y, training=training)
             a1 = y + left
-        return y
+        return a1
 
 

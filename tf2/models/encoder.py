@@ -34,8 +34,8 @@ class ResidualEncoder(BaseModel):
         acts = []
         acts.append(x)
         for i in range(self.num_blocks):
-            act = self.act_layers['megvii_residual_{}'.format(i+1)](x, training=training)
-            acts.append(act)
+            x = self.act_layers['megvii_residual_{}'.format(i+1)](x, training=training)
+            acts.append(x)
 
         return acts
         
